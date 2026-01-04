@@ -12,9 +12,13 @@ from fredapi import Fred
 import pandas as pd
 import numpy as np
 import urllib.request
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, PageBreak
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.units import cm
 
 #Fred access variables
-fred_api_key= "Your own key"   #use your own Fred api key
+fred_api_key= "Your key"   #use your own Fred api key
 fred = Fred(api_key=fred_api_key)
 
 #Global variables
@@ -99,36 +103,38 @@ def compute_assets (prices_df) :
 
 
 assets_yoy = compute_assets(access_asset_prices(asset_tickers,Backtest_start,Backtest_end))
-assets_yoy
+assets_yoy = assets_yoy.rename(columns=asset_mapping)
 
 #Final computation of vol for each regime
 def compute_vol_regime(Regime, assets_yoy):
     data = Regime.join(assets_yoy, how="inner")
     vol_regime = data.groupby("Regime").std()
-
+    plt.figure(figsize=(10, 6))
     sb.heatmap(vol_regime, cmap="RdBu_r", annot=True, fmt=".2f",
                linewidths=0.5, cbar_kws={"label": "Volatility"})
     plt.title("Asset Volatility by Macroeconomic Regime")
     plt.ylabel("Macroeconomic Regime")
     plt.xlabel("Asset Class")
     plt.tight_layout()
+    plt.savefig("vol_heatmap.png", dpi=200)
     plt.show()
-
+   
     return vol_regime
 
 #Final computation of returns for each regime
 def compute_return_regime(Regime, assets_yoy):
     data = Regime.join(assets_yoy, how="inner")
     return_regime = data.groupby("Regime").mean()
-
+    plt.figure(figsize=(10, 6))
     sb.heatmap(return_regime, cmap="RdBu_r", center=0, annot=True, fmt=".2f",
                linewidths=0.5, cbar_kws={"label": "Mean Return"})
     plt.title("Asset Returns by Macroeconomic Regime")
     plt.ylabel("Macroeconomic Regime")
     plt.xlabel("Asset Class")
     plt.tight_layout()
+    plt.savefig("ret_heatmap.png", dpi=200)
     plt.show()
-
+    
     return return_regime
 
 #Final computation of normal returns for each regime
@@ -140,13 +146,14 @@ def compute_normal_return_regime(Regime, assets_yoy):
 
     norm_regime = mean_regime / vol_regime
     norm_regime = norm_regime.replace([np.inf, -np.inf], np.nan)
-
+    plt.figure(figsize=(10, 6))
     sb.heatmap(norm_regime, cmap="RdBu_r", center=0, annot=True, fmt=".2f",
                linewidths=0.5, cbar_kws={"label": "Normalized Return (Mean/Vol)"})
     plt.title("Normalized Return by Macroeconomic Regime")
     plt.ylabel("Macroeconomic Regime")
     plt.xlabel("Asset Class")
     plt.tight_layout()
+    plt.savefig("norm_heatmap.png", dpi=200)
     plt.show()
 
     return norm_regime
@@ -155,7 +162,17 @@ def compute_normal_return_regime(Regime, assets_yoy):
 macro_m   = fetching_fred(fred_tickers)         
 Regime_df = compute_macro_regim(macro_m)
 
-#the 3 final heatmaps
+# PDF/small report of the findings
+def export_pdf(pdf_name):
+    doc = SimpleDocTemplate(pdf_name, pagesize=A4, rightMargin=2*cm, leftMargin=2*cm, topMargin=2*cm, bottomMargin=2*cm)
+    story = []
+    for img in ["vol_heatmap.png", "ret_heatmap.png", "norm_heatmap.png"]:
+        story.append(Image(img, width=17*cm, height=10*cm))
+        story.append(PageBreak())
+    doc.build(story)
+#Final export in pdf with the 3 heatmaps   
 vol = compute_vol_regime(Regime_df, assets_yoy)
 ret = compute_return_regime(Regime_df, assets_yoy)
 nor = compute_normal_return_regime(Regime_df, assets_yoy)
+
+export_pdf("risk_on_risk_off_report.pdf")
